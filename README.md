@@ -1,0 +1,1 @@
+# Syntecxhub_AI_Internship_JamilaPashayeva
