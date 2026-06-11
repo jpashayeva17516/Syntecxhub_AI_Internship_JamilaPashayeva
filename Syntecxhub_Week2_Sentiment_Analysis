@@ -1,0 +1,369 @@
+Syntecxhub_Sentiment_Analysis/
+│
+├── data.py            # Built-in labeled dataset (tweets/reviews)
+├── preprocessor.py    # Text cleaning & tokenization
+├── model.py           # Training, evaluation, prediction
+├── main.py            # CLI entry point
+└── model.pkl          # Auto-saved trained model
+
+/////////////////////////////////////////////////////////////////////
+data.py 
+////////////////////////////////////////////////////////////////////
+
+# data.py
+
+# -------------------------------------------------------
+# Labeled dataset: (text, label)
+# Labels: "positive", "negative", "neutral"
+# -------------------------------------------------------
+
+DATASET = [
+    # --- POSITIVE ---
+    ("I love this product, it is absolutely amazing!",       "positive"),
+    ("This is the best thing I have ever bought!",           "positive"),
+    ("Fantastic quality, I am very happy with this.",        "positive"),
+    ("Great experience, highly recommend it to everyone.",   "positive"),
+    ("I am so pleased with this purchase, works perfectly.", "positive"),
+    ("Excellent service and super fast delivery!",           "positive"),
+    ("This made my day, totally worth the price.",           "positive"),
+    ("Outstanding performance, I could not ask for more.",   "positive"),
+    ("Really good product, will definitely buy again.",      "positive"),
+    ("Wonderful! Exceeded all my expectations.",             "positive"),
+    ("I feel so happy using this every single day.",         "positive"),
+    ("Best purchase I have made this year, love it!",        "positive"),
+    ("So delighted with the results, truly impressive.",     "positive"),
+    ("The quality is superb, very satisfied customer here.", "positive"),
+    ("Five stars, absolutely brilliant product!",            "positive"),
+    ("Perfect gift, my friend loved it so much.",            "positive"),
+    ("This works like a charm, very impressed.",             "positive"),
+    ("Top notch quality, I am thrilled with this buy.",      "positive"),
+    ("Loving every feature of this, great value for money.", "positive"),
+    ("Incredible product, I recommend it to all my friends.", "positive"),
+
+    # --- NEGATIVE ---
+    ("This is terrible, completely waste of money.",         "negative"),
+    ("Worst product I have ever bought, very disappointed.", "negative"),
+    ("Awful quality, broke after just one day of use.",      "negative"),
+    ("Do not buy this, it is a complete scam.",              "negative"),
+    ("I am so frustrated, this does not work at all.",       "negative"),
+    ("Very poor quality, absolutely not worth the price.",   "negative"),
+    ("Horrible experience, customer service was useless.",   "negative"),
+    ("Terrible product, stopped working after a week.",      "negative"),
+    ("I hate this, it is the worst purchase I ever made.",   "negative"),
+    ("Total garbage, I want my money back immediately.",     "negative"),
+    ("Extremely disappointed, nothing as described.",        "negative"),
+    ("This product is defective and very poorly made.",      "negative"),
+    ("Never buying from this brand again, really bad.",      "negative"),
+    ("Broken on arrival, packaging was also damaged.",       "negative"),
+    ("One star is too generous for this awful product.",     "negative"),
+    ("Failed to work from day one, completely useless.",     "negative"),
+    ("Very unhappy with this, regret buying it completely.", "negative"),
+    ("The worst thing I have spent my money on, avoid it.",  "negative"),
+    ("Disgusting quality, looks nothing like the photos.",   "negative"),
+    ("Absolute rubbish, falling apart after first use.",     "negative"),
+
+    # --- NEUTRAL ---
+    ("The product arrived on time and is okay I guess.",     "neutral"),
+    ("It is an average product, nothing special really.",    "neutral"),
+    ("Does what it says, neither good nor bad.",             "neutral"),
+    ("Packaging was fine, product is just acceptable.",      "neutral"),
+    ("It is alright, meets basic expectations I suppose.",   "neutral"),
+    ("Not bad but not great either, just average.",          "neutral"),
+    ("Fairly standard product, does the job for now.",       "neutral"),
+    ("I ordered this last week and it arrived today.",       "neutral"),
+    ("The item is as described, nothing more nothing less.", "neutral"),
+    ("Mediocre product, would not rave about it to anyone.", "neutral"),
+    ("It works but I expected a bit more from it honestly.", "neutral"),
+    ("Product is okay, delivery took longer than expected.", "neutral"),
+    ("Decent enough for the price, not impressive though.",  "neutral"),
+    ("It is fine, I use it occasionally, nothing special.",  "neutral"),
+    ("Average build quality, does not stand out at all.",    "neutral"),
+    ("Got what I paid for, no complaints but no praise.",    "neutral"),
+    ("It is satisfactory, serves the basic purpose fine.",   "neutral"),
+    ("Not impressed but not disappointed either, just meh.", "neutral"),
+    ("The product is functional but could be much better.",  "neutral"),
+    ("Middle of the road product, you get what you pay for.","neutral"),
+]
+
+///////////////////////////////////////////////////////////////////////////
+preprocessor.py
+////////////////////////////////////////////////////////////////////////////
+
+# preprocessor.py
+
+import re
+import string
+
+# Common English stop words (no NLTK needed)
+STOP_WORDS = {
+    "i", "me", "my", "we", "our", "you", "your", "he", "she",
+    "it", "its", "they", "them", "what", "which", "who", "this",
+    "that", "these", "those", "am", "is", "are", "was", "were",
+    "be", "been", "being", "have", "has", "had", "do", "does",
+    "did", "will", "would", "could", "should", "may", "might",
+    "a", "an", "the", "and", "but", "or", "if", "in", "on",
+    "at", "by", "for", "with", "about", "to", "from", "of",
+    "so", "yet", "both", "just", "than", "too", "very", "can",
+    "now", "after", "before", "up", "out", "as", "into", "then"
+}
+
+class TextPreprocessor:
+
+    def clean(self, text):
+        """Full pipeline: lowercase → remove noise → tokenize → remove stopwords → rejoin."""
+        text = text.lower()
+        text = self._remove_urls(text)
+        text = self._remove_mentions_hashtags(text)
+        text = self._remove_punctuation(text)
+        text = self._remove_extra_spaces(text)
+        tokens = self._tokenize(text)
+        tokens = self._remove_stopwords(tokens)
+        return " ".join(tokens)
+
+    def _remove_urls(self, text):
+        return re.sub(r"http\S+|www\S+", "", text)
+
+    def _remove_mentions_hashtags(self, text):
+        return re.sub(r"@\w+|#\w+", "", text)
+
+    def _remove_punctuation(self, text):
+        return text.translate(str.maketrans("", "", string.punctuation))
+
+    def _remove_extra_spaces(self, text):
+        return re.sub(r"\s+", " ", text).strip()
+
+    def _tokenize(self, text):
+        return text.split()
+
+    def _remove_stopwords(self, tokens):
+        return [t for t in tokens if t not in STOP_WORDS]
+
+
+//////////////////////////////////////////////////////////////////////////////////////
+model.py file
+/////////////////////////////////////////////////////////////////////////////////////
+
+# model.py
+
+import os
+import pickle
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import (accuracy_score, f1_score,
+                              classification_report, confusion_matrix)
+from preprocessor import TextPreprocessor
+from data import DATASET
+
+MODEL_FILE = "model.pkl"
+
+class SentimentModel:
+    def __init__(self):
+        self.preprocessor = TextPreprocessor()
+        self.vectorizer    = TfidfVectorizer(ngram_range=(1, 2), max_features=5000)
+        self.classifier    = LogisticRegression(max_iter=1000, random_state=42)
+        self.is_trained    = False
+
+    # -------------------------------------------------------
+    # Train
+    # -------------------------------------------------------
+    def train(self):
+        print("\n⏳ Preparing data...")
+        texts  = [self.preprocessor.clean(t) for t, _ in DATASET]
+        labels = [label for _, label in DATASET]
+
+        # Split into train / test (80/20)
+        X_train, X_test, y_train, y_test = train_test_split(
+            texts, labels, test_size=0.2, random_state=42, stratify=labels
+        )
+
+        print("⏳ Vectorizing text with TF-IDF...")
+        X_train_vec = self.vectorizer.fit_transform(X_train)
+        X_test_vec  = self.vectorizer.transform(X_test)
+
+        print("⏳ Training Logistic Regression classifier...")
+        self.classifier.fit(X_train_vec, y_train)
+        self.is_trained = True
+
+        # Evaluate
+        y_pred = self.classifier.predict(X_test_vec)
+        self._print_evaluation(y_test, y_pred)
+
+        # Save model to disk
+        self.save()
+
+    # -------------------------------------------------------
+    # Evaluate
+    # -------------------------------------------------------
+    def _print_evaluation(self, y_true, y_pred):
+        acc = accuracy_score(y_true, y_pred)
+        f1  = f1_score(y_true, y_pred, average="weighted")
+
+        print("\n" + "=" * 45)
+        print("       📊 Model Evaluation Results")
+        print("=" * 45)
+        print(f"  Accuracy  : {acc * 100:.2f}%")
+        print(f"  F1 Score  : {f1 * 100:.2f}%  (weighted)")
+        print("=" * 45)
+        print("\n📋 Classification Report:")
+        print(classification_report(y_true, y_pred,
+              target_names=["negative", "neutral", "positive"]))
+
+        # Confusion Matrix
+        cm = confusion_matrix(y_true, y_pred,
+                              labels=["negative", "neutral", "positive"])
+        print("🔲 Confusion Matrix:")
+        print(f"  {'':12} {'Pred NEG':>10} {'Pred NEU':>10} {'Pred POS':>10}")
+        print(f"  {'True NEG':12} {cm[0][0]:>10} {cm[0][1]:>10} {cm[0][2]:>10}")
+        print(f"  {'True NEU':12} {cm[1][0]:>10} {cm[1][1]:>10} {cm[1][2]:>10}")
+        print(f"  {'True POS':12} {cm[2][0]:>10} {cm[2][1]:>10} {cm[2][2]:>10}")
+
+    # -------------------------------------------------------
+    # Predict
+    # -------------------------------------------------------
+    def predict(self, text):
+        """Predict sentiment for a single input string."""
+        if not self.is_trained:
+            raise RuntimeError("Model not trained yet!")
+
+        cleaned = self.preprocessor.clean(text)
+        vec     = self.vectorizer.transform([cleaned])
+        label   = self.classifier.predict(vec)[0]
+        probs   = self.classifier.predict_proba(vec)[0]
+        classes = self.classifier.classes_
+
+        # Build confidence scores dict
+        confidence = {cls: round(prob * 100, 2)
+                      for cls, prob in zip(classes, probs)}
+        return label, confidence
+
+    # -------------------------------------------------------
+    # Save / Load
+    # -------------------------------------------------------
+    def save(self):
+        with open(MODEL_FILE, "wb") as f:
+            pickle.dump({
+                "vectorizer": self.vectorizer,
+                "classifier": self.classifier
+            }, f)
+        print(f"\n💾 Model saved to '{MODEL_FILE}'")
+
+    def load(self):
+        if not os.path.exists(MODEL_FILE):
+            return False
+        with open(MODEL_FILE, "rb") as f:
+            data = pickle.load(f)
+        self.vectorizer = data["vectorizer"]
+        self.classifier = data["classifier"]
+        self.is_trained = True
+        print("✅ Pre-trained model loaded from disk.")
+        return True
+
+  //////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
+
+  # main.py
+
+from model import SentimentModel
+
+EMOJI = {
+    "positive": "😊 POSITIVE",
+    "negative": "😠 NEGATIVE",
+    "neutral":  "😐 NEUTRAL"
+}
+
+BAR_CHAR = "█"
+
+def confidence_bar(percent, width=20):
+    """Draw a simple ASCII progress bar."""
+    filled = int(percent / 100 * width)
+    return BAR_CHAR * filled + "░" * (width - filled)
+
+def print_banner():
+    print("=" * 50)
+    print("     🧠 Sentiment Analysis Tool")
+    print("     Powered by TF-IDF + Logistic Regression")
+    print("=" * 50)
+    print("  Type any text to analyse its sentiment.")
+    print("  Commands: 'retrain' | 'quit'")
+    print("=" * 50)
+
+def print_result(text, label, confidence):
+    print("\n" + "─" * 50)
+    print(f"  Input     : {text}")
+    print(f"  Sentiment : {EMOJI.get(label, label.upper())}")
+    print("\n  Confidence Scores:")
+    for sentiment in ["positive", "neutral", "negative"]:
+        pct = confidence.get(sentiment, 0)
+        bar = confidence_bar(pct)
+        print(f"    {sentiment.capitalize():<10} [{bar}] {pct:.1f}%")
+    print("─" * 50)
+
+def main():
+    model = SentimentModel()
+    print_banner()
+
+    # Try loading saved model first, else train fresh
+    if not model.load():
+        print("\n🚀 No saved model found. Training now...")
+        model.train()
+
+    while True:
+        try:
+            user_input = input("\n📝 Enter text: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n\n👋 Goodbye!")
+            break
+
+        if not user_input:
+            continue
+
+        if user_input.lower() == "quit":
+            print("\n👋 Goodbye!")
+            break
+
+        if user_input.lower() == "retrain":
+            print("\n🔄 Retraining model from scratch...")
+            model.train()
+            continue
+
+        # Predict
+        try:
+            label, confidence = model.predict(user_input)
+            print_result(user_input, label, confidence)
+        except Exception as e:
+            print(f"\n❌ Error: {e}")
+
+if __name__ == "__main__":
+    main()
+
+    //////////////////////////////////////////////////////////
+    Example
+    ///////////////////////////////////////////////////////////////////
+
+    ==================================================
+     🧠 Sentiment Analysis Tool
+==================================================
+
+✅ Pre-trained model loaded from disk.
+
+📝 Enter text: This product is absolutely amazing, I love it!
+
+──────────────────────────────────────────────────
+  Input     : This product is absolutely amazing, I love it!
+  Sentiment : 😊 POSITIVE
+
+  Confidence Scores:
+    Positive   [████████████████░░░░] 82.4%
+    Neutral    [███░░░░░░░░░░░░░░░░░] 12.1%
+    Negative   [█░░░░░░░░░░░░░░░░░░░]  5.5%
+──────────────────────────────────────────────────
+
+📝 Enter text: Worst purchase ever, complete waste of money.
+
+  Sentiment : 😠 NEGATIVE
+  Positive     4.2%
+  Neutral      8.1%
+  Negative    87.7%
