@@ -1,0 +1,386 @@
+Syntecxhub_Rule_Based_Chatbot/
+│
+├── patterns.py        # All intents, patterns & responses
+├── chatbot.py         # Core matching engine + knowledge base
+├── main.py            # CLI entry point + conversation logger
+└── chat_history.txt   # Auto-created conversation log
+
+/////////////////////////////////////////////////////////////////////
+patterns.py file
+//////////////////////////////////////////////////////////////////////
+
+# patterns.py
+
+import re
+
+# -------------------------------------------------------
+# Each intent has:
+#   "patterns"  : list of regex patterns to match input
+#   "responses" : list of possible replies (picked randomly)
+# -------------------------------------------------------
+
+INTENTS = [
+    {
+        "tag": "greeting",
+        "patterns": [
+            r"\bhello\b", r"\bhi\b", r"\bhey\b",
+            r"\bgood morning\b", r"\bgood afternoon\b",
+            r"\bgood evening\b", r"\bwhat'?s up\b"
+        ],
+        "responses": [
+            "Hello! How can I help you today? 😊",
+            "Hey there! What can I do for you?",
+            "Hi! Great to see you. What's on your mind?"
+        ]
+    },
+    {
+        "tag": "farewell",
+        "patterns": [
+            r"\bbye\b", r"\bgoodbye\b", r"\bsee you\b",
+            r"\btake care\b", r"\bsee ya\b", r"\bquit\b",
+            r"\bexit\b"
+        ],
+        "responses": [
+            "Goodbye! Have a wonderful day! 👋",
+            "See you later! Take care! 😊",
+            "Bye bye! Come back anytime!"
+        ]
+    },
+    {
+        "tag": "thanks",
+        "patterns": [
+            r"\bthanks?\b", r"\bthank you\b",
+            r"\bmuch appreciated\b", r"\bcheers\b"
+        ],
+        "responses": [
+            "You're welcome! 😊",
+            "Happy to help!",
+            "Anytime! Let me know if you need anything else."
+        ]
+    },
+    {
+        "tag": "help",
+        "patterns": [
+            r"\bhelp\b", r"\bwhat can you do\b",
+            r"\bwhat do you know\b", r"\byour features\b",
+            r"\bcapabilities\b"
+        ],
+        "responses": [
+            (
+                "I can help you with:\n"
+                "  🔹 General conversation (greetings, small talk)\n"
+                "  🔹 Python questions\n"
+                "  🔹 Programming tips\n"
+                "  🔹 Basic math calculations\n"
+                "  🔹 Telling you a joke!\n"
+                "Just type your question!"
+            )
+        ]
+    },
+    {
+        "tag": "small_talk_how",
+        "patterns": [
+            r"\bhow are you\b", r"\bhow do you do\b",
+            r"\bare you okay\b", r"\bhow'?s it going\b"
+        ],
+        "responses": [
+            "I'm just a bot, but I'm doing great! How about you?",
+            "Running at 100%! Ready to help you. 🤖",
+            "All good on my end! What can I do for you?"
+        ]
+    },
+    {
+        "tag": "small_talk_name",
+        "patterns": [
+            r"\bwhat is your name\b", r"\bwhat'?s your name\b",
+            r"\bwho are you\b", r"\byour name\b"
+        ],
+        "responses": [
+            "I'm ChatBot, your friendly Python-powered assistant! 🤖",
+            "You can call me ChatBot! How can I assist?",
+            "I'm ChatBot — here to help you 24/7!"
+        ]
+    },
+    {
+        "tag": "joke",
+        "patterns": [
+            r"\bjoke\b", r"\btell me a joke\b",
+            r"\bmake me laugh\b", r"\bfunny\b"
+        ],
+        "responses": [
+            "Why do programmers prefer dark mode? Because light attracts bugs! 🐛😄",
+            "Why did the Python developer go broke? Because he lost his dictionary! 📖😂",
+            "What do you call a fish without eyes? A fsh! 🐟😂"
+        ]
+    },
+    # -------------------------------------------------------
+    # Domain knowledge — Python / Programming
+    # -------------------------------------------------------
+    {
+        "tag": "python_what",
+        "patterns": [
+            r"\bwhat is python\b", r"\bdefine python\b",
+            r"\btell me about python\b"
+        ],
+        "responses": [
+            (
+                "Python is a high-level, interpreted programming language "
+                "known for its simple syntax and readability. It's widely "
+                "used in web development, data science, AI, and automation! 🐍"
+            )
+        ]
+    },
+    {
+        "tag": "python_oop",
+        "patterns": [
+            r"\boop\b", r"\bobject.?oriented\b",
+            r"\bclass\b", r"\bobject\b", r"\binheritance\b"
+        ],
+        "responses": [
+            (
+                "OOP (Object-Oriented Programming) in Python uses:\n"
+                "  🔹 Classes  — blueprints for objects\n"
+                "  🔹 Objects  — instances of classes\n"
+                "  🔹 Inheritance — child class gets parent features\n"
+                "  🔹 Encapsulation — hiding internal details\n"
+                "  🔹 Polymorphism — same method, different behaviour"
+            )
+        ]
+    },
+    {
+        "tag": "python_list",
+        "patterns": [
+            r"\blist\b", r"\barray\b", r"\bappend\b"
+        ],
+        "responses": [
+            (
+                "A Python list stores multiple items:\n"
+                "  my_list = [1, 2, 3]\n"
+                "  my_list.append(4)   # add item\n"
+                "  my_list.remove(1)   # remove item\n"
+                "  my_list[0]          # access by index"
+            )
+        ]
+    },
+    {
+        "tag": "python_dict",
+        "patterns": [
+            r"\bdictionary\b", r"\bdict\b", r"\bkey.?value\b",
+            r"\bhashmap\b"
+        ],
+        "responses": [
+            (
+                "A Python dictionary stores key-value pairs:\n"
+                "  d = {'name': 'Alice', 'age': 20}\n"
+                "  d['name']        # access → 'Alice'\n"
+                "  d['city'] = 'NY' # add new key\n"
+                "  del d['age']     # delete key"
+            )
+        ]
+    },
+    {
+        "tag": "math",
+        "patterns": [
+            r"\bmath\b", r"\bcalculate\b", r"\bsum\b",
+            r"\badd\b", r"\bmultiply\b"
+        ],
+        "responses": [
+            (
+                "I can do basic math! Try typing:\n"
+                "  e.g.  2 + 3   or   10 * 5   or   100 / 4\n"
+                "I'll calculate it for you! 🔢"
+            )
+        ]
+    },
+    {
+        "tag": "default",
+        "patterns": [],   # fallback — matched last
+        "responses": [
+            "Hmm, I'm not sure about that. Could you rephrase?",
+            "I don't quite understand. Try asking something else!",
+            "That's beyond my knowledge for now. Type 'help' to see what I can do."
+        ]
+    }
+]
+
+# -------------------------------------------------------
+# Simple inline math evaluator (safe — no eval())
+# -------------------------------------------------------
+MATH_PATTERN = re.compile(
+    r"^\s*(-?\d+(\.\d+)?)\s*([+\-*/])\s*(-?\d+(\.\d+)?)\s*$"
+)
+
+///////////////////////////////////////////////////////////////////////////////////////////
+chatbot.py
+////////////////////////////////////////////////////////////////////////////////////////////
+
+# chatbot.py
+
+import re
+import random
+from patterns import INTENTS, MATH_PATTERN
+
+class ChatBot:
+    def __init__(self, name="ChatBot"):
+        self.name = name
+
+    # -------------------------------------------------------
+    # Core response method
+    # -------------------------------------------------------
+    def get_response(self, user_input):
+        text = user_input.strip().lower()
+
+        # 1. Check for inline math expression first
+        math_result = self._try_math(text)
+        if math_result is not None:
+            return f"🔢 Result: {math_result}"
+
+        # 2. Try to match an intent (skip "default" tag)
+        for intent in INTENTS:
+            if intent["tag"] == "default":
+                continue
+            for pattern in intent["patterns"]:
+                if re.search(pattern, text):
+                    return random.choice(intent["responses"])
+
+        # 3. Fallback to default
+        default = next(i for i in INTENTS if i["tag"] == "default")
+        return random.choice(default["responses"])
+
+    # -------------------------------------------------------
+    # Safe math evaluator — no eval()
+    # -------------------------------------------------------
+    def _try_math(self, text):
+        match = MATH_PATTERN.match(text)
+        if not match:
+            return None
+        a  = float(match.group(1))
+        op = match.group(3)
+        b  = float(match.group(4))
+
+        if op == "+": result = a + b
+        elif op == "-": result = a - b
+        elif op == "*": result = a * b
+        elif op == "/":
+            if b == 0:
+                return "Error: Division by zero! ❌"
+            result = a / b
+
+        # Return int if result is whole number
+        return int(result) if result == int(result) else round(result, 4)
+
+//////////////////////////////////////////////////////////////////////////////////////
+main.py file
+/////////////////////////////////////////////////////////////////////////////////////
+
+# main.py
+
+import os
+from datetime import datetime
+from chatbot import ChatBot
+
+LOG_FILE = "chat_history.txt"
+
+def log_message(role, message):
+    """Append a message to the chat history log file."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {role}: {message}\n")
+
+def print_banner():
+    print("=" * 50)
+    print("       🤖 Rule-Based ChatBot")
+    print("       Powered by Python Pattern Matching")
+    print("=" * 50)
+    print("  Type 'quit' or 'bye' to exit")
+    print("  Type 'history' to view chat log")
+    print("  Type 'clear' to clear the screen")
+    print("=" * 50)
+
+def show_history():
+    """Display saved conversation history."""
+    if not os.path.exists(LOG_FILE):
+        print("\n⚠️  No chat history found yet.")
+        return
+    print("\n--- 📜 Chat History ---")
+    with open(LOG_FILE, "r", encoding="utf-8") as f:
+        content = f.read()
+        print(content if content.strip() else "  (empty)")
+    print("--- End of History ---")
+
+def main():
+    bot = ChatBot(name="ChatBot")
+    print_banner()
+
+    # Log session start
+    log_message("SYSTEM", "=== New session started ===")
+
+    while True:
+        try:
+            user_input = input("\nYou: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n\n👋 Goodbye!")
+            log_message("SYSTEM", "=== Session ended ===\n")
+            break
+
+        if not user_input:
+            continue
+
+        # Special commands
+        if user_input.lower() == "history":
+            show_history()
+            continue
+
+        if user_input.lower() == "clear":
+            os.system("cls" if os.name == "nt" else "clear")
+            print_banner()
+            continue
+
+        # Log user input
+        log_message("User", user_input)
+
+        # Get and print bot response
+        response = bot.get_response(user_input)
+        print(f"\n{bot.name}: {response}")
+
+        # Log bot response
+        log_message("Bot", response)
+
+        # Exit triggers
+        if any(word in user_input.lower()
+               for word in ["bye", "goodbye", "quit", "exit"]):
+            log_message("SYSTEM", "=== Session ended ===\n")
+            break
+
+if __name__ == "__main__":
+    main()
+
+////////////////////////////////////////////////////////////////////////
+example session
+///////////////////////////////////////////////////////////////////////////
+
+==================================================
+       🤖 Rule-Based ChatBot
+==================================================
+You: hello
+ChatBot: Hey there! What can I do for you?
+
+You: what is python
+ChatBot: Python is a high-level, interpreted programming language...
+
+You: 25 * 4
+ChatBot: 🔢 Result: 100
+
+You: tell me a joke
+ChatBot: Why do programmers prefer dark mode? Because light attracts bugs! 🐛
+
+You: what is a dictionary
+ChatBot: A Python dictionary stores key-value pairs...
+
+You: history
+--- 📜 Chat History ---
+[2025-06-11 10:30:01] User: hello
+[2025-06-11 10:30:01] Bot : Hey there! ...
+
+You: bye
+ChatBot: Goodbye! Have a wonderful day! 👋
